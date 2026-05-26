@@ -1,0 +1,19 @@
+.dashboard {
+  padding: 40px;
+}
+
+.dashboard h1 {
+  margin-bottom: 30px;
+}
+
+.cards {
+  display: flex;
+  gap: 20px;
+}
+
+.card {
+  background-color: #1e293b;
+  padding: 20px;
+  border-radius: 10px;
+  width: 200px;
+}

@@ -1,0 +1,16 @@
+.navbar {
+  background-color: #111827;
+  padding: 20px;
+  display: flex;
+  gap: 20px;
+}
+
+.navbar a {
+  color: white;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.navbar a:hover {
+  color: #38bdf8;
+}
