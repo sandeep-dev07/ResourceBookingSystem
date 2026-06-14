@@ -1,24 +1,13 @@
 package com.bookslot.config;
 
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/**
+ * CORS configuration is now managed by SecurityConfig.java
+ * This class is kept for reference and can be removed if no longer needed.
+ * Spring Security's corsConfigurationSource bean handles all CORS requirements.
+ */
 @Configuration
 public class CorsConfig {
-
-    @Bean
-    public WebMvcConfigurer corsConfigurer() {
-        return new WebMvcConfigurer() {
-            @Override
-            public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/**")
-                        .allowedOrigins("http://localhost:5173")
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                        .allowedHeaders("*")
-                        .allowCredentials(true);
-            }
-        };
-    }
+    // CORS is configured in SecurityConfig via corsConfigurationSource()
 }

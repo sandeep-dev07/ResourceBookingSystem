@@ -34,7 +34,7 @@ function Login() {
         email: formData.email,
         password: formData.password,
       });
-
+localStorage.setItem("token", user.token);
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
 
       const dashboardPath =

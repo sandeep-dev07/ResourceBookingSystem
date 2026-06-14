@@ -1,6 +1,7 @@
  package com.bookslot.service;
 
 import com.bookslot.dto.AuthResponse;
+import com.bookslot.security.JwtUtil;
 import com.bookslot.dto.LoginRequest;
 import com.bookslot.dto.RegisterRequest;
 import com.bookslot.entity.User;
@@ -35,7 +36,7 @@ public class AuthService {
                 request.getEmail().toLowerCase(),
                 request.getPassword(),
                 request.getRole()
-        );
+        ); 
 
         // Store normal password directly
         user.setPasswordHash(request.getPassword());
@@ -63,12 +64,18 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid credentials.");
         }
 
-        // Return login response
-        return new AuthResponse(
+        // Generate JWT token
+        String token = JwtUtil.generateToken(user.getEmail());
+
+        // Build response
+        AuthResponse response = new AuthResponse(
                 user.getId(),
                 user.getFullName(),
                 user.getEmail(),
                 user.getRole()
         );
-    }
-}
+
+        response.setToken(token);
+
+        return response;
+    }}

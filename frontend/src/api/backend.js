@@ -65,3 +65,34 @@ export async function cancelBooking(bookingId, email) {
     method: "DELETE",
   });
 }
+
+export async function scheduleMaintenance(payload) {
+  return request("/maintenance/schedule", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAllMaintenance() {
+  return request("/maintenance/all");
+}
+
+export async function fetchMaintenanceByResource(resourceId) {
+  return request(`/maintenance/resource/${resourceId}`);
+}
+
+export async function fetchMaintenanceByResourceAndDate(resourceId, date) {
+  return request(`/maintenance/resource/${resourceId}/date?date=${date}`);
+}
+
+export async function cancelMaintenance(maintenanceId) {
+  return request(`/maintenance/${maintenanceId}/cancel`, {
+    method: "PUT",
+  });
+}
+
+export async function completeMaintenance(maintenanceId) {
+  return request(`/maintenance/${maintenanceId}/complete`, {
+    method: "PUT",
+  });
+}

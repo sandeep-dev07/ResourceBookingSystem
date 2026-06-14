@@ -1,8 +1,10 @@
-import { Link, useLocation } from "react-router-dom";
+ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../utils/resourceData";
 
 function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+
   const currentUser = getCurrentUser();
   const role = currentUser?.role || "User";
 
@@ -17,7 +19,7 @@ function Navbar() {
     ],
     Manager: [
       { to: "/manager-dashboard", label: "Dashboard" },
-      { to: "/manager-bookings", label: "Manage Bookings" },
+      { to: "/manager-dashboard", label: "Maintenance Schedule" },
       { to: "/manager-availability", label: "Availability" },
       { to: "/manager-reports", label: "Reports" },
     ],
@@ -30,6 +32,12 @@ function Navbar() {
 
   const links = roleLinks[role] || roleLinks.User;
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("resourceBookingCurrentUser");
+    navigate("/");
+  };
+
   return (
     <nav className="nav-shell">
       <div className="nav-bar">
@@ -37,13 +45,16 @@ function Navbar() {
           <div className="brand-mark">🏢</div>
           <div className="brand-copy">
             <p className="brand-title">Resource Booking System</p>
-            <p className="brand-subtitle">Elegant booking management for modern teams</p>
+            <p className="brand-subtitle">
+              Elegant booking management for modern teams
+            </p>
           </div>
         </div>
 
         <div className="nav-links">
           {links.map((link) => {
             const isActive = location.pathname === link.to;
+
             return (
               <Link
                 key={link.to}
@@ -56,9 +67,18 @@ function Navbar() {
             );
           })}
 
-          <Link to="/" className="nav-link logout">
+          <button
+            type="button"
+            className="nav-link logout"
+            onClick={handleLogout}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
             Logout
-          </Link>
+          </button>
         </div>
       </div>
     </nav>

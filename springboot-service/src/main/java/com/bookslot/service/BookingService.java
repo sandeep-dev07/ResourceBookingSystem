@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,13 +22,16 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final ResourceRepository resourceRepository;
+    private final MaintenanceService maintenanceService;
 
     public BookingService(BookingRepository bookingRepository,
                           UserRepository userRepository,
-                          ResourceRepository resourceRepository) {
+                          ResourceRepository resourceRepository,
+                          MaintenanceService maintenanceService) {
         this.bookingRepository = bookingRepository;
         this.userRepository = userRepository;
         this.resourceRepository = resourceRepository;
+        this.maintenanceService = maintenanceService;
     }
 
     @Transactional
@@ -40,6 +44,7 @@ public class BookingService {
 
         validateBookingRequest(request);
 
+        // Check for conflicting bookings
         List<Booking> conflicts = bookingRepository.findConflictingBookings(
                 resource.getId(),
                 request.getBookingDate(),
@@ -49,6 +54,15 @@ public class BookingService {
 
         if (!conflicts.isEmpty()) {
             throw new IllegalStateException("This resource is already booked for the selected time slot.");
+        }
+
+        // Check for maintenance conflicts
+        if (maintenanceService.hasMaintenanceConflict(
+                resource.getId(),
+                request.getBookingDate(),
+                request.getStartTime(),
+                request.getEndTime())) {
+            throw new IllegalStateException("This resource is under maintenance during the selected time slot. Please choose a different time.");
         }
 
         Booking booking = new Booking(
@@ -66,7 +80,7 @@ public class BookingService {
                 saved.getId(),
                 user.getEmail(),
                 user.getFullName(),
-                resource.getId().toString(),
+                resource.getId().toString(), 
                 resource.getName(),
                 saved.getBookingDate(),
                 saved.getStartTime(),
