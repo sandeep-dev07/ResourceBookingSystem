@@ -3,9 +3,17 @@ import { normalizeBooking } from "../utils/resourceData";
 const API_BASE_URL = "http://localhost:8080";
 
 async function request(endpoint, options = {}) {
+
+  const currentUser = JSON.parse(
+    localStorage.getItem("resourceBookingCurrentUser") || "{}"
+  );
+
+  const token = currentUser.token;
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
     ...options,
@@ -95,4 +103,8 @@ export async function completeMaintenance(maintenanceId) {
   return request(`/maintenance/${maintenanceId}/complete`, {
     method: "PUT",
   });
+}
+
+export async function fetchAllUsers() {
+  return request("/admin/users");
 }

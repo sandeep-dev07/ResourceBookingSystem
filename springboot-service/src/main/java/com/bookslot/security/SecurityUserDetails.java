@@ -20,7 +20,11 @@ public class SecurityUserDetails implements UserDetails {
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         List<GrantedAuthority> authorities = new ArrayList<>();
-        authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getRole()));
+        authorities.add(
+        	    new SimpleGrantedAuthority(
+        	        "ROLE_" + user.getRole().toUpperCase()
+        	    )
+        	);
         return authorities;
     }
 
@@ -34,7 +38,7 @@ public class SecurityUserDetails implements UserDetails {
         return user.getEmail();
     }
 
-    @Override
+    @Override 
     public boolean isAccountNonExpired() {
         return true;
     }

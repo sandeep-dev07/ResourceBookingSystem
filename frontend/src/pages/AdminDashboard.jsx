@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchAllBookings } from "../api/backend";
+import {
+  fetchAllBookings,
+  fetchAllUsers,
+  registerUser,
+} from "../api/backend";
 import {
   getBookings,
   getCurrentUser,
@@ -27,7 +31,7 @@ const USERS_KEY = "resourceBookingUsers";
 function AdminDashboard({ defaultSection = "dashboard" }) {
   const currentUser = getCurrentUser();
   const [activeSection, setActiveSection] = useState(defaultSection);
-  const [users, setUsers] = useState(() => JSON.parse(localStorage.getItem(USERS_KEY) || "[]"));
+const [users, setUsers] = useState([]);
   const [rooms, setRooms] = useState(() => getRooms());
   const [bookings, setBookings] = useState(() => getBookings());
   const [maintenanceRooms, setMaintenanceRooms] = useState(() => getMaintenanceRooms());
@@ -78,6 +82,30 @@ function AdminDashboard({ defaultSection = "dashboard" }) {
     };
   }, []);
 
+  useEffect(() => {
+  let isMounted = true;
+
+  const loadUsers = async () => {
+    try {
+      const backendUsers = await fetchAllUsers();
+
+      if (!isMounted) {
+        return;
+      }
+
+      setUsers(backendUsers);
+    } catch (error) {
+      console.error("Failed to load users", error);
+    }
+  };
+
+  loadUsers();
+
+  return () => {
+    isMounted = false;
+  };
+}, []);
+
   const saveUsers = (nextUsers) => {
     setUsers(nextUsers);
     localStorage.setItem(USERS_KEY, JSON.stringify(nextUsers));
@@ -127,33 +155,40 @@ function AdminDashboard({ defaultSection = "dashboard" }) {
     saveRoomStatusOverrides(nextOverrides);
   };
 
-  const handleAddUser = (event) => {
-    event.preventDefault();
+  const handleAddUser = async (event) => {
+  event.preventDefault();
 
-    if (!userForm.fullName || !userForm.email || !userForm.password) {
-      setMessageTone("error");
-      setMessage("Please complete all fields before adding a user.");
-      return;
-    }
+  if (!userForm.fullName || !userForm.email || !userForm.password) {
+    setMessageTone("error");
+    setMessage("Please complete all fields before adding a user.");
+    return;
+  }
 
-    if (users.some((user) => user.email === userForm.email)) {
-      setMessageTone("error");
-      setMessage("An account with that email already exists.");
-      return;
-    }
+  try {
+    const createdUser = await registerUser({
+  fullName: userForm.fullName,
+  email: userForm.email,
+  password: userForm.password,
+  confirmPassword: userForm.password,
+  role: userForm.role,
+});
 
-    const newUser = {
-      fullName: userForm.fullName,
-      email: userForm.email,
-      password: userForm.password,
-      role: userForm.role,
-    };
+    setUsers((prev) => [...prev, createdUser]);
 
-    saveUsers([...users, newUser]);
-    setUserForm({ fullName: "", email: "", password: "", role: "User" });
+    setUserForm({
+      fullName: "",
+      email: "",
+      password: "",
+      role: "User",
+    });
+
     setMessageTone("success");
     setMessage("User added successfully.");
-  };
+  } catch (error) {
+    setMessageTone("error");
+    setMessage(error.message || "Failed to create user.");
+  }
+};
 
   const handleRoleChange = (email, role) => {
     const nextUsers = users.map((user) =>
