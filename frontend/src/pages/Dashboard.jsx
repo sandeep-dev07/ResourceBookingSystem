@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   getAverageReview,
   getBookings,
   getCurrentUser,
-  getReviews,
   getRooms,
   getRoomStatus,
   getUpcomingUserBookings,
-  saveReviews,
 } from "../utils/resourceData";
+import { fetchAllUsers, fetchAllBookings } from "../api/backend";
+import { fetchReviews, createReview, updateReview, deleteReview } from "../api/reviews";
 
 function Dashboard({ roleLabel } = {}) {
   const currentUser = getCurrentUser();
@@ -40,18 +40,90 @@ function Dashboard({ roleLabel } = {}) {
   const availableRooms = rooms.filter(
     (room) => getRoomStatus(room.id, bookings) === "Available"
   ).length;
+  const roomsUnderMaintenance = rooms.filter(
+    (room) => getRoomStatus(room.id, bookings) === "Maintenance"
+  ).length;
 
-  const [reviews, setReviews] = useState(() => getReviews());
+  const [reviews, setReviews] = useState([]);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState("success");
 
+  // Edit review state
+  const [editingReviewId, setEditingReviewId] = useState(null);
+  const [editRating, setEditRating] = useState(5);
+  const [editComment, setEditComment] = useState("");
+
+  // Analytics counts state
+  const [totalUsersCount, setTotalUsersCount] = useState(8);
+  const [totalBookingsCount, setTotalBookingsCount] = useState(15);
+
   const nextBooking = userBookings[0];
   const averageReview = getAverageReview(reviews);
   const reviewCount = reviews.length;
 
-  const handleReviewSubmit = (event) => {
+  // Load reviews on mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadReviewsData = async () => {
+      try {
+        const data = await fetchReviews();
+        if (isMounted) {
+          setReviews(data);
+        }
+      } catch (error) {
+        console.error("Failed to load reviews from Node.js backend:", error);
+      }
+    };
+    loadReviewsData();
+    return () => { isMounted = false; };
+  }, []);
+
+  // Load total users and bookings count
+  useEffect(() => {
+    let isMounted = true;
+    const loadAnalyticsData = async () => {
+      // 1. Fetch Users
+      try {
+        const backendUsers = await fetchAllUsers();
+        if (isMounted) {
+          setTotalUsersCount(backendUsers.length);
+        }
+      } catch {
+        // Fallback for non-admins to count users in local store
+        const localUsers = JSON.parse(localStorage.getItem("resourceBookingUsers") || "[]");
+        if (isMounted) {
+          setTotalUsersCount(localUsers.length || 8);
+        }
+      }
+
+      // 2. Fetch Bookings
+      try {
+        if (currentUser?.role === "Admin" || currentUser?.role === "Manager") {
+          const allBookings = await fetchAllBookings();
+          if (isMounted) {
+            setTotalBookingsCount(allBookings.length);
+          }
+        } else {
+          const localBookings = JSON.parse(localStorage.getItem("resourceBookingBookings") || "[]");
+          if (isMounted) {
+            setTotalBookingsCount(localBookings.length || 15);
+          }
+        }
+      } catch {
+        const localBookings = JSON.parse(localStorage.getItem("resourceBookingBookings") || "[]");
+        if (isMounted) {
+          setTotalBookingsCount(localBookings.length || 15);
+        }
+      }
+    };
+
+    loadAnalyticsData();
+    return () => { isMounted = false; };
+  }, [currentUser]);
+
+  const handleReviewSubmit = async (event) => {
     event.preventDefault();
 
     if (!currentUser) {
@@ -66,22 +138,66 @@ function Dashboard({ roleLabel } = {}) {
       return;
     }
 
-    const newReview = {
-      id: `${Date.now()}`,
-      userName: currentUser.fullName || currentUser.email,
-      userEmail: currentUser.email,
-      rating,
-      comment: comment.trim(),
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const payload = {
+        userName: currentUser.fullName || currentUser.email,
+        userEmail: currentUser.email,
+        rating,
+        comment: comment.trim(),
+      };
 
-    const updatedReviews = [newReview, ...reviews];
-    saveReviews(updatedReviews);
-    setReviews(updatedReviews);
-    setRating(5);
-    setComment("");
-    setMessageTone("success");
-    setMessage("Thanks for sharing your feedback!");
+      const savedReview = await createReview(payload);
+      setReviews((prev) => [savedReview, ...prev]);
+      setRating(5);
+      setComment("");
+      setMessageTone("success");
+      setMessage("Thanks for sharing your feedback!");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error.message || "Failed to submit review.");
+    }
+  };
+
+  const handleReviewEditStart = (review) => {
+    setEditingReviewId(review._id || review.id);
+    setEditRating(review.rating);
+    setEditComment(review.comment);
+  };
+
+  const handleReviewUpdate = async (event, reviewId) => {
+    event.preventDefault();
+    if (!editComment.trim()) {
+      alert("Please enter review comment.");
+      return;
+    }
+
+    try {
+      const updated = await updateReview(reviewId, {
+        rating: editRating,
+        comment: editComment.trim(),
+      });
+      setReviews((prev) =>
+        prev.map((r) => ((r._id || r.id) === reviewId ? updated : r))
+      );
+      setEditingReviewId(null);
+    } catch (error) {
+      alert(error.message || "Failed to update review.");
+    }
+  };
+
+  const handleReviewDelete = async (reviewId) => {
+    if (!window.confirm("Are you sure you want to delete this review?")) {
+      return;
+    }
+
+    try {
+      await deleteReview(reviewId);
+      setReviews((prev) =>
+        prev.filter((r) => (r._id || r.id) !== reviewId)
+      );
+    } catch (error) {
+      alert(error.message || "Failed to delete review.");
+    }
   };
 
   const renderStars = (value) =>
@@ -94,6 +210,21 @@ function Dashboard({ roleLabel } = {}) {
           cursor: "pointer",
         }}
         onClick={() => setRating(index + 1)}
+      >
+        ★
+      </span>
+    ));
+
+  const renderEditStars = (value) =>
+    Array.from({ length: 5 }, (_, index) => (
+      <span
+        key={`edit-${value}-${index}`}
+        style={{
+          color: index < value ? "#facc15" : "#475569",
+          fontSize: "1.35rem",
+          cursor: "pointer",
+        }}
+        onClick={() => setEditRating(index + 1)}
       >
         ★
       </span>
@@ -166,16 +297,18 @@ function Dashboard({ roleLabel } = {}) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
             gap: "18px",
             marginTop: "28px",
           }}
         >
           {[
-            { title: "Total Rooms", value: totalRooms, tone: "#93c5fd" },
+            { title: "Total Users", value: totalUsersCount, tone: "#93c5fd" },
+            { title: "Total Bookings", value: totalBookingsCount, tone: "#f9a8d4" },
+            { title: "Total Reviews", value: reviewCount, tone: "#bfdbfe" },
             { title: "Available Rooms", value: availableRooms, tone: "#86efac" },
-            { title: "My Active Bookings", value: userBookings.length, tone: "#f9a8d4" },
-            { title: "Upcoming Reservations", value: userBookings.length, tone: "#fde68a" },
+            { title: "Rooms Under Maintenance", value: roomsUnderMaintenance, tone: "#fca5a5" },
+            { title: "Average Rating", value: `${reviewCount > 0 ? averageReview.toFixed(1) : "0.0"} / 5`, tone: "#fde68a" },
           ].map((item) => (
             <div
               key={item.title}
@@ -184,6 +317,7 @@ function Dashboard({ roleLabel } = {}) {
                 borderRadius: "18px",
                 padding: "22px",
                 border: `1px solid ${item.tone}`,
+                boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3)",
               }}
             >
               <p style={{ color: "#cbd5e1", margin: 0 }}>{item.title}</p>
@@ -488,54 +622,209 @@ function Dashboard({ roleLabel } = {}) {
             gap: "16px",
           }}
         >
-          {reviews.map((review) => (
+          {reviews.length === 0 ? (
             <div
-              key={review.id}
               style={{
                 backgroundColor: "#111827",
                 borderRadius: "20px",
                 padding: "22px",
-                border: "1px solid rgba(59, 130, 246, 0.28)",
+                border: "1px solid rgba(59, 130, 246, 0.2)",
+                textAlign: "center",
+                color: "#cbd5e1",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "16px",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <h3 style={{ margin: "0 0 6px" }}>{review.userName}</h3>
-                  <p style={{ margin: 0, color: "#cbd5e1" }}>
-                    {new Date(review.createdAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-                <div style={{ display: "flex", gap: "4px" }}>
-                  {Array.from({ length: 5 }, (_, index) => (
-                    <span
-                      key={`${review.id}-${index}`}
-                      style={{
-                        color: index < review.rating ? "#facc15" : "#475569",
-                        fontSize: "1.1rem",
-                      }}
-                    >
-                      ★
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <p style={{ color: "#e2e8f0", marginBottom: 0, marginTop: "14px", lineHeight: 1.7 }}>
-                “{review.comment}”
-              </p>
+              No reviews yet. Be the first to share your experience!
             </div>
-          ))}
+          ) : (
+            reviews.map((review) => {
+              const reviewId = review._id || review.id;
+              const isEditing = editingReviewId === reviewId;
+              const isOwnReview = currentUser && review.userEmail === currentUser.email;
+
+              return (
+                <div
+                  key={reviewId}
+                  style={{
+                    backgroundColor: "#111827",
+                    borderRadius: "20px",
+                    padding: "22px",
+                    border: isEditing
+                      ? "1px solid #3b82f6"
+                      : "1px solid rgba(59, 130, 246, 0.28)",
+                    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.2)",
+                  }}
+                >
+                  {isEditing ? (
+                    <form
+                      onSubmit={(e) => handleReviewUpdate(e, reviewId)}
+                      style={{ display: "grid", gap: "12px" }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "16px",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <h3 style={{ margin: "0 0 6px" }}>{review.userName}</h3>
+                          <span style={{ color: "#93c5fd", fontSize: "0.85rem", fontWeight: "600" }}>
+                            Editing your review
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          {renderEditStars(editRating)}
+                        </div>
+                      </div>
+                      <textarea
+                        value={editComment}
+                        onChange={(e) => setEditComment(e.target.value)}
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          resize: "vertical",
+                          borderRadius: "12px",
+                          border: "1px solid rgba(96, 165, 250, 0.4)",
+                          backgroundColor: "#0f172a",
+                          color: "white",
+                          padding: "12px",
+                          boxSizing: "border-box",
+                          fontFamily: "inherit",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <button
+                          type="submit"
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: "999px",
+                            border: "none",
+                            backgroundColor: "#22c55e",
+                            color: "#082f49",
+                            fontWeight: "800",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Save Changes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingReviewId(null)}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: "999px",
+                            border: "none",
+                            backgroundColor: "#475569",
+                            color: "white",
+                            fontWeight: "700",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "16px",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <h3 style={{ margin: "0 0 6px" }}>{review.userName}</h3>
+                          <p style={{ margin: 0, color: "#cbd5e1", fontSize: "0.85rem" }}>
+                            {review.createdAt
+                              ? new Date(review.createdAt).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })
+                              : "Recently"}
+                          </p>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "12px",
+                            alignItems: "center",
+                          }}
+                        >
+                          <div style={{ display: "flex", gap: "4px" }}>
+                            {Array.from({ length: 5 }, (_, index) => (
+                              <span
+                                key={`${reviewId}-${index}`}
+                                style={{
+                                  color: index < review.rating ? "#facc15" : "#475569",
+                                  fontSize: "1.1rem",
+                                }}
+                              >
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                          {isOwnReview && (
+                            <div style={{ display: "flex", gap: "8px", marginLeft: "12px" }}>
+                              <button
+                                type="button"
+                                onClick={() => handleReviewEditStart(review)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "#93c5fd",
+                                  cursor: "pointer",
+                                  fontSize: "0.85rem",
+                                  padding: "4px 8px",
+                                  borderRadius: "6px",
+                                  backgroundColor: "rgba(147, 197, 253, 0.12)",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleReviewDelete(reviewId)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "#fca5a5",
+                                  cursor: "pointer",
+                                  fontSize: "0.85rem",
+                                  padding: "4px 8px",
+                                  borderRadius: "6px",
+                                  backgroundColor: "rgba(252, 165, 165, 0.12)",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <p
+                        style={{
+                          color: "#e2e8f0",
+                          marginBottom: 0,
+                          marginTop: "14px",
+                          lineHeight: 1.7,
+                        }}
+                      >
+                        “{review.comment}”
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
